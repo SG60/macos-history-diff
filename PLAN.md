@@ -3,6 +3,21 @@
 Goal: a macOS-only Rust CLI that shows how a text file evolved, using the macOS file versions
 infrastructure (`NSFileVersion`). Diffing is delegated to `git diff --no-index`.
 
+## Status
+
+Steps 0–8 are implemented. `cargo build --release`, `cargo test`, `cargo clippy -- -D warnings` and
+`cargo fmt --check` pass. Version-dependent checks were run by the maintainer outside the sandbox
+(see `AGENTS.md`).
+
+- 1 Scaffold: done. `objc2-foundation` also needs the `NSEnumerator` feature for `NSArray::iter()`.
+- 2 Spike: done on a generated fixture; see the step notes below.
+- 3 `versions.rs`: done. It is the only module using `objc2*`.
+- 4 `selector.rs`: done, with unit tests.
+- 5 `diff.rs`: done. Git runs inside the temp dir with relative names, so delta shows short names.
+- 6 `commands.rs`: done.
+- 7 Tests: done, with deviations noted below.
+- 8 Docs: `README.md` written; `AGENTS.md` added for the sandbox limitation.
+
 Rules for the implementer:
 - Work through the steps in order. Run `cargo build` and `cargo clippy` after each step.
 - Do not invent API signatures. If a method name is uncertain, check the objc2-foundation source
@@ -40,6 +55,16 @@ Binary name `mhd` (`[[bin]] name = "mhd"`; package name `macos-history-diff`).
 - Modules: `main.rs` (clap + dispatch), `versions.rs` (ObjC), `selector.rs`, `diff.rs`, `commands.rs`.
 
 ## 2. Spike (do BEFORE the rest; report and stop if it fails)
+
+Outcome: the example file returned no other versions. It was re-copied into the repo, so it has no
+version history of its own. Synthetic versions via `addVersionOfItemAtURL` failed inside the sandbox
+(NSCocoaErrorDomain 512), and the sandbox hides the version store entirely. Both worked outside it,
+so `examples/gen_versions.rs` builds a fixture with three versions. The spike was then run against
+that fixture, which passed. The throwaway spike was deleted.
+
+Synthetic versions: `addVersionOfItemAtURL` stores the given contents as an older version. The
+generator therefore stores each outgoing content before overwriting the file, as a save does. Storing
+the new content instead duplicates the current file in the list.
 
 Throwaway `examples/spike.rs` (delete afterwards) that:
 1. Takes a path, canonicalizes it, builds an `NSURL` (`fileURLWithPath`).
@@ -94,6 +119,16 @@ Unit tests: `current`, `0`, out of range, garbage, empty list.
   then the diff. Newest first by default, `--reverse` for oldest first. Skip identical pairs.
 
 ## 7. Tests
+
+Deviations:
+- `example textedit doc.txt` has no version history, so the `list`/`diff`/`log` integration tests use a
+  fixture from `examples/gen_versions.rs` in a temp dir instead. The definition-of-done check on the example
+  file therefore shows only `current`.
+- `examples/gen_versions.rs` uses `objc2*` outside `src/versions.rs`. The tests need it because the crate
+  has no lib target to share helpers.
+- `persistentIdentifier` equality does not identify the current version among the others. No dedupe is
+  done, so real files are expected not to list the current content as an older version. Revisit if they do.
+- Versioned-file tests need to run outside the sandbox.
 
 - Integration tests in `tests/` with `assert_cmd` against `example textedit doc.txt` (path via `env!("CARGO_MANIFEST_DIR")`):
   `list` shows >= 2 rows; `diff 0 current` exits 0 and prints a diff; `log` prints at least one header;
