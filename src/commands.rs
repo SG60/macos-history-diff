@@ -7,7 +7,7 @@ use crate::diff;
 use crate::selector;
 use crate::versions::{self, Version};
 
-const NO_HISTORY: &str = "No saved versions. Versions are only recorded for files saved through apps that use macOS autosave/versions (e.g. TextEdit, Pages), not plain writes from editors or the command line.";
+pub const NO_HISTORY: &str = "No saved versions. Versions are only recorded for files saved through apps that use macOS autosave/versions (e.g. TextEdit, Pages), not plain writes from editors or the command line.";
 
 pub fn list(file: &Path) -> Result<()> {
     let versions = versions::list_versions(file)?;
@@ -119,7 +119,7 @@ fn snapshot_or_skip(dir: &tempfile::TempDir, name: &str, v: &Version) -> Result<
     diff::snapshot(dir.path(), name, v)?.ok_or_else(|| anyhow!("binary file, skipped"))
 }
 
-fn version_name(v: &Version) -> String {
+pub fn version_name(v: &Version) -> String {
     if v.is_current {
         "current".to_string()
     } else {
@@ -127,7 +127,7 @@ fn version_name(v: &Version) -> String {
     }
 }
 
-fn format_date(v: &Version) -> String {
+pub fn format_date(v: &Version) -> String {
     v.modified.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 

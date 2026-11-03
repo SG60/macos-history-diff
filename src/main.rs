@@ -4,6 +4,8 @@ compile_error!("macos-history-diff only supports macOS");
 mod commands;
 mod diff;
 mod selector;
+mod textdiff;
+mod ui;
 mod versions;
 
 use clap::{Parser, Subcommand};
@@ -39,6 +41,11 @@ enum Command {
         #[arg(long)]
         reverse: bool,
     },
+    /// Open a window to explore the file's version timeline
+    Ui {
+        /// File to open; if omitted, use Open or drag a file into the window
+        file: Option<PathBuf>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -47,5 +54,6 @@ fn main() -> anyhow::Result<()> {
         Command::List { file } => commands::list(&file),
         Command::Diff { file, a, b } => commands::diff(&file, a.as_deref(), b.as_deref()),
         Command::Log { file, reverse } => commands::log(&file, reverse),
+        Command::Ui { file } => ui::run(file),
     }
 }

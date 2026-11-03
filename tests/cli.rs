@@ -147,3 +147,12 @@ fn log_is_newest_first_unless_reversed() {
     let newest = oldest_first.find("── 1 → current").expect(&oldest_first);
     assert!(oldest < newest, "{oldest_first}");
 }
+
+#[test]
+fn ui_help_lists_optional_file() {
+    mhd()
+        .args(["ui", "--help"])
+        .assert()
+        .success()
+        .stdout(contains("[FILE]"));
+}
