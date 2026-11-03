@@ -1,4 +1,5 @@
 use std::fs;
+use std::io;
 use std::path::Path;
 
 use similar::{ChangeTag, TextDiff};
@@ -32,9 +33,10 @@ pub struct Diff {
     pub removed: usize,
 }
 
-/// Reads a file as UTF-8 text. `None` if the content is not valid UTF-8 (treated as binary).
-pub fn read_text(path: &Path) -> Option<String> {
-    String::from_utf8(fs::read(path).ok()?).ok()
+/// Reads a file as UTF-8 text. `Ok(None)` if the content is not valid UTF-8 (treated as binary);
+/// `Err` if the file cannot be read.
+pub fn read_text(path: &Path) -> io::Result<Option<String>> {
+    Ok(String::from_utf8(fs::read(path)?).ok())
 }
 
 /// Line diff between `old` and `new`, showing `context` unchanged lines around each change.
@@ -139,10 +141,16 @@ mod tests {
     }
 
     #[test]
-    fn read_text_rejects_non_utf8() {
+    fn read_text_reports_non_utf8_as_binary() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("bin");
         fs::write(&path, [0xff, 0xfe, 0x00]).unwrap();
-        assert_eq!(read_text(&path), None);
+        assert_eq!(read_text(&path).unwrap(), None);
+    }
+
+    #[test]
+    fn read_text_reports_io_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(read_text(&dir.path().join("missing")).is_err());
     }
 }

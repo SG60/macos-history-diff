@@ -136,10 +136,11 @@ fn diff_pane(ui: &mut egui::Ui, model: &Model) {
     ui.add_space(4.0);
 
     let dark = ui.visuals().dark_mode;
+    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
     egui::ScrollArea::both()
         .auto_shrink([false, false])
-        .show(ui, |ui| {
-            for row in &diff.rows {
+        .show_rows(ui, row_height, diff.rows.len(), |ui, range| {
+            for row in &diff.rows[range] {
                 match row {
                     Row::Gap(n) => {
                         ui.label(

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::textdiff::{self, Diff};
 use crate::versions::{self, Version};
@@ -18,6 +18,8 @@ pub struct Model {
     pub selected: usize,
     /// Version marked with `b`; when set, the diff is `base → selected` instead of `previous → selected`.
     pub base: Option<usize>,
+    /// Diff for the current pair, recomputed whenever the selection or base changes.
+    diff: Option<Diff>,
 }
 
 /// The two versions a diff compares. `old` is `None` when there is no earlier version to compare against.
@@ -32,8 +34,11 @@ impl Model {
         let versions = versions::list_versions(file)?;
         let texts = versions
             .iter()
-            .map(|v| textdiff::read_text(&v.url))
-            .collect();
+            .map(|v| {
+                textdiff::read_text(&v.url)
+                    .with_context(|| format!("reading version {} at {}", v.index, v.url.display()))
+            })
+            .collect::<Result<_>>()?;
         Ok(Self::from_parts(file.to_path_buf(), versions, texts))
     }
 
@@ -49,14 +54,29 @@ impl Model {
             };
         }
         let selected = versions.len().saturating_sub(1);
-        Self {
+        let mut model = Self {
             file,
             versions,
             texts,
             stats,
             selected,
             base: None,
-        }
+            diff: None,
+        };
+        model.refresh();
+        model
+    }
+
+    /// Applies a previous view state (selection and base) to a freshly loaded model, e.g. after reload.
+    /// Indices of existing versions are stable because new versions are appended as the newest.
+    pub fn restore(&mut self, selected: usize, base: Option<usize>) {
+        self.select(selected);
+        self.base = base.filter(|&b| b < self.versions.len());
+        self.refresh();
+    }
+
+    fn refresh(&mut self) {
+        self.diff = self.compute_diff();
     }
 
     pub fn has_history(&self) -> bool {
@@ -74,6 +94,7 @@ impl Model {
     pub fn select(&mut self, index: usize) {
         if !self.versions.is_empty() {
             self.selected = index.min(self.versions.len() - 1);
+            self.refresh();
         }
     }
 
@@ -92,10 +113,12 @@ impl Model {
         } else {
             Some(self.selected)
         };
+        self.refresh();
     }
 
     pub fn clear_base(&mut self) {
         self.base = None;
+        self.refresh();
     }
 
     /// The pair shown in the diff pane, or `None` when the selected version is its own base.
@@ -117,8 +140,12 @@ impl Model {
         }
     }
 
-    /// Diff for the current pair. `None` if either side is binary or there is nothing to compare.
-    pub fn diff(&self) -> Option<Diff> {
+    /// Diff for the current pair, if any. `None` if either side is binary or there is nothing to compare.
+    pub fn diff(&self) -> Option<&Diff> {
+        self.diff.as_ref()
+    }
+
+    fn compute_diff(&self) -> Option<Diff> {
         let pair = self.pair()?;
         let new = self.texts[pair.new].as_deref()?;
         let old = match pair.old {
@@ -197,6 +224,57 @@ mod tests {
         assert_eq!(m.base, Some(1));
         m.toggle_base();
         assert_eq!(m.base, None);
+    }
+
+    #[test]
+    fn empty_history_has_no_pair_or_diff() {
+        let mut m = Model::from_parts(PathBuf::from("doc.txt"), Vec::new(), Vec::new());
+        assert!(!m.has_history());
+        assert_eq!(m.pair(), None);
+        assert!(m.diff().is_none());
+        m.select_next();
+        m.toggle_base();
+        m.select_prev();
+        assert_eq!(m.selected, 0);
+        assert_eq!(m.base, Some(0));
+        assert!(m.diff().is_none());
+    }
+
+    #[test]
+    fn single_version_has_no_history_but_shows_its_content() {
+        let m = model(&["a\nb\n"]);
+        assert!(!m.has_history());
+        assert_eq!(m.pair(), Some(Pair { old: None, new: 0 }));
+        assert_eq!(m.diff().unwrap().added, 2);
+    }
+
+    #[test]
+    fn restore_keeps_selection_and_drops_out_of_range_base() {
+        let mut m = model(&["a\n", "b\n"]);
+        m.restore(0, Some(1));
+        assert_eq!(m.selected, 0);
+        assert_eq!(m.base, Some(1));
+        assert_eq!(
+            m.pair(),
+            Some(Pair {
+                old: Some(0),
+                new: 1
+            })
+        );
+
+        m.restore(5, Some(7));
+        assert_eq!(m.selected, 1);
+        assert_eq!(m.base, None);
+    }
+
+    #[test]
+    fn diff_is_updated_when_selection_changes() {
+        let mut m = model(&["a\n", "a\nb\n", "a\nb\nc\n"]);
+        assert_eq!(m.diff().unwrap().added, 1);
+        m.select(1);
+        assert_eq!(m.diff().unwrap().added, 1);
+        m.select(0);
+        assert_eq!(m.diff().unwrap().added, 1);
     }
 
     #[test]

@@ -32,18 +32,32 @@ struct App {
 
 impl App {
     fn open(&mut self, path: PathBuf) {
-        match Model::load(&path) {
-            Ok(model) => {
+        self.set_result(Model::load(&path), None);
+    }
+
+    fn reload(&mut self) {
+        let Some((path, selected, base)) = self
+            .model
+            .as_ref()
+            .map(|m| (m.file.clone(), m.selected, m.base))
+        else {
+            return;
+        };
+        self.set_result(Model::load(&path), Some((selected, base)));
+    }
+
+    /// Replaces the model on success, optionally restoring a previous view state. Keeps the
+    /// current model on failure and shows the error.
+    fn set_result(&mut self, result: Result<Model>, restore: Option<(usize, Option<usize>)>) {
+        match result {
+            Ok(mut model) => {
+                if let Some((selected, base)) = restore {
+                    model.restore(selected, base);
+                }
                 self.model = Some(model);
                 self.error = None;
             }
             Err(e) => self.error = Some(format!("{e:#}")),
-        }
-    }
-
-    fn reload(&mut self) {
-        if let Some(path) = self.model.as_ref().map(|m| m.file.clone()) {
-            self.open(path);
         }
     }
 
