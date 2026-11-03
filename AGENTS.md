@@ -15,3 +15,7 @@ of these is needed:
 - Request a sandbox bypass for that individual command, if the environment offers one.
 
 Do not treat an empty version list from inside the sandbox as evidence that a file has no history.
+
+# Version control
+
+You can use `jj` for version control.
